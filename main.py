@@ -182,10 +182,8 @@ def insert_producto(conn):
 
 
 def menuImpreso():
-    print("[1]. Ingresar un producto")
-    print("[2]. Ingresar un registro")
-    print("[3]. Mostrar lista productos")
-    print("[4]. Mostrar lista registros")
+    print("[1]. Mostrar lista productos")
+    print("[2]. Mostrar lista registros")
     print("[0]. Salir del Programa")
 
 def menu(conn):
@@ -194,21 +192,14 @@ def menu(conn):
     while option != 0:
         if option == 1:
             with conn:
-                insert_producto(conn) 
-            pass
-        elif option == 2:
-            with conn:
-                insertar_registro(conn)
-            pass
-        elif option == 3:
-            with conn:
                 print("1. info correspondiente a la tabla productos:")
                 show_all_producto(conn)
             pass
-        elif option == 4:
+        elif option == 2:
             with conn:
                 print("4. info correspondiente a la tabla registros:")
-                show_all_registro(conn)       
+                show_all_registro(conn)  
+            pass     
         else:
             print("selecione un numero disponible en el menu")
         print()
