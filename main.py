@@ -2,6 +2,10 @@ from Registro import *
 from Producto import *
 import sqlite3
 from sqlite3 import Error
+import pika
+from json import loads
+import threading
+
 
 
 
@@ -10,10 +14,72 @@ def create_connection(db_file):
    
     conn = None
     try:
-        conn = sqlite3.connect(db_file)
+        conn = sqlite3.connect(db_file,check_same_thread=False)
     except Error as e:
         print(e)
     return conn
+
+
+def rabbitmq(conn):
+    
+    def insert_db_rabitmq(ch,method,properties,body):
+    
+        body_parse = loads(body)
+
+        nombre_material = body_parse["nombre_material"]
+        cantidad_material = body_parse["cantidad_material"]
+        fecha = body_parse["fecha"] 
+
+        cur = conn.cursor()
+        cur.execute("""SELECT id FROM PRODUCTO WHERE nombre = '%s'""" % nombre_material)
+
+        id_producto = "NULL"
+
+        try:
+            id_producto = cur.fetchone()[0]
+        except:
+            id_producto = "NULL"
+            pass
+
+        if id_producto == "NULL":
+                        
+            cur.execute("""INSERT INTO PRODUCTO( nombre, cantidad) 
+                    VALUES (?,?)""",( nombre_material, cantidad_material))
+
+            conn.commit()
+
+            cur.execute("""SELECT id FROM PRODUCTO WHERE nombre = '%s'""" % nombre_material)
+
+            id_producto = cur.fetchone()[0]
+        
+        cur.execute("""INSERT INTO Registro( id_producto, fecha, cantidad) 
+                    VALUES (?,?,?)""",( id_producto, fecha, cantidad_material))
+
+        conn.commit()
+    # ==================================================================
+    # rabbit connection.
+
+
+
+
+    print ("iniciando rabbit")
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+    channel = connection.channel()
+
+    channel.exchange_declare(exchange='mantencion', exchange_type='direct')
+
+    result = channel.queue_declare(queue='', exclusive=True)
+    queue_name = result.method.queue
+
+    channel.queue_bind(exchange='mantencion', queue=queue_name, routing_key="sBodega")
+
+    channel.basic_consume(queue=queue_name, on_message_callback= insert_db_rabitmq, auto_ack=True)
+
+    channel.start_consuming()
+
+
+
+
 
 #select all workers
 def show_all_registro(conn):
@@ -67,13 +133,13 @@ def insertar_registro(conn):
             print ("Supera el maximo de cantidad del producto")
             return 
 
-        print("Entrando")
+        # print("Entrando")
 
 
         cur.execute("UPDATE Producto SET cantidad = ? WHERE id = ?", (cantidadNuevo,id_producto))
         conn.commit()
 
-        print("Update")
+        # print("Update")
 
         fecha = input("ingrese fecha: ")
 
@@ -84,7 +150,7 @@ def insertar_registro(conn):
 
         conn.commit()
 
-        print("Registro Insertado")
+        # print("Registro Insertado")
         return 
 
     except:
@@ -115,19 +181,15 @@ def insert_producto(conn):
     print("El producto fue insertado.")
 
 
-def menu():
+def menuImpreso():
     print("[1]. Ingresar un producto")
     print("[2]. Ingresar un registro")
     print("[3]. Mostrar lista productos")
     print("[4]. Mostrar lista registros")
     print("[0]. Salir del Programa")
 
-def main():
-    database = r"C:\Users\ale\Desktop\bodega\BodegaDB.db"
-    # create a database connection
-    conn = create_connection(database)
-
-    menu()
+def menu(conn):
+    menuImpreso()
     option = int(input("ingresar opcion: "))
     while option != 0:
         if option == 1:
@@ -150,11 +212,17 @@ def main():
         else:
             print("selecione un numero disponible en el menu")
         print()
-        menu()
+        menuImpreso()
         option = int(input("ingresar opcion: "))
     print("gracias por usar este programa")
    
 
 if __name__ == '__main__':
-    main()
+    database = r"C:\Users\ale\Desktop\bodega\BodegaDB.db"
+    conn = create_connection(database)
+
+    t = threading.Thread(target=menu, args=[conn])
+    t.start()
+    rabbitmq(conn)
+    
     
